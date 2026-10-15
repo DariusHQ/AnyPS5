@@ -1222,6 +1222,29 @@ class ImportAuditTests(unittest.TestCase):
         self.assertIn("input", err)
         self.assertEqual(registry.read_bytes(), before)
 
+    def test_json_output_cannot_overwrite_source_cmake_metadata(self):
+        work = self.work
+        owner, library = "libOwner", "libShared"
+        write_source(work.source, owner, STUB_SOURCE.format(name="scePending"))
+        shared = work.source / library
+        shared.mkdir()
+        cmake = shared / "CMakeLists.txt"
+        cmake.write_text(f'include(${{CMAKE_CURRENT_SOURCE_DIR}}/../{owner}/OwnerLibrary.cmake)\n')
+        nid = nid_names.compute_nid("scePending")
+        (work.libs / (library + ".prx")).write_bytes(exporting(nid))
+        registry = work.root / "game.json"
+        write_registry(registry, [(nid, library + ".prx")])
+        before = cmake.read_bytes()
+        code, out, err = work.run(registry, "--json", str(cmake))
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("input", err)
+        self.assertEqual(cmake.read_bytes(), before)
+        output = work.root / "audit.json"
+        code, _, err = work.run(registry, "--json", str(output))
+        self.assertEqual((code, err), (0, ""))
+        records = json.loads(output.read_text(encoding="utf-8"))["imports"]
+        self.assertEqual([(record["nid"], record["class"]) for record in records], [(nid, "stub")])
+
     def test_git_stamp_uses_selected_source_tree(self):
         completed = type("Completed", (), {"stdout": "abcdef\n"})()
         with patch.object(import_audit.subprocess, "run", return_value=completed) as run:
