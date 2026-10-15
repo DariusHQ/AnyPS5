@@ -1,5 +1,7 @@
 #include "prx/libc/include/general/VabiMacros.hpp"
 #include <array>
+#include <cctype>
+#include <clocale>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -147,6 +149,39 @@ static void CheckCaseInsensitiveComparison() {
     Require(strncasecmp_nid_postfix("x", "y", 0) == 0 && strncasecmp_nid_postfix("same", "SAME", 99) == 0);
 }
 
+static void CheckHostCaseLocale() {
+    const std::string original = std::setlocale(LC_CTYPE, nullptr);
+#ifdef _WIN32
+    const char* locale = std::setlocale(LC_CTYPE, "French_France.1252");
+#else
+    const char* locale = std::setlocale(LC_CTYPE, "fr_FR.ISO-8859-1");
+#endif
+    volatile int hostByte = 0xc0;
+    if (locale == nullptr || std::tolower(hostByte) != 0xe0) {
+        Require(std::setlocale(LC_CTYPE, original.c_str()) != nullptr);
+        std::fputs("Host case locale unavailable; skipping locale isolation checks\n", stderr);
+        return;
+    }
+    const char upper[] = {static_cast<char>(0xc0), 'A', 0};
+    const char lower[] = {static_cast<char>(0xe0), 'a', 0};
+    Require(strcasecmp_nid_postfix(upper, lower) == -32);
+    Require(strcasecmp_nid_postfix(lower, upper) == 32);
+    Require(strncasecmp_nid_postfix(upper, lower, 1) == -32);
+    Require(strncasecmp_nid_postfix(lower, upper, 2) == 32);
+    Require(strncasecmp_nid_postfix(upper, lower, 0) == 0);
+    Require(strcasestr_nid_postfix(upper, lower) == nullptr);
+    Require(strcasestr_nid_postfix(lower, upper) == nullptr);
+    const char same[] = {static_cast<char>(0xc0), 'a', 0};
+    Require(strcasecmp_nid_postfix(upper, same) == 0);
+    Require(strncasecmp_nid_postfix(upper, same, sizeof(upper)) == 0);
+    Require(strcasestr_nid_postfix(upper, same) == upper);
+    Require(strcasestr_nid_postfix(upper, "a") == upper + 1);
+    Require(strcasestr_nid_postfix(upper, "") == upper);
+    Require(strcasestr_nid_postfix("", same) == nullptr);
+    CheckCaseInsensitiveComparison();
+    Require(std::setlocale(LC_CTYPE, original.c_str()) != nullptr);
+}
+
 static void CheckSscanfS() {
 #ifndef _WIN32
     int number = 0;
@@ -216,6 +251,7 @@ int main() {
     if (!CheckDirnameLengths()) return 1;
     CheckBoundsCheckedFunctions();
     CheckCaseInsensitiveComparison();
+    CheckHostCaseLocale();
     CheckSscanfS();
     Require(std::strcmp(dirname_nid_postfix(nullptr), ".") == 0);
     char emptyPath[] = "";
