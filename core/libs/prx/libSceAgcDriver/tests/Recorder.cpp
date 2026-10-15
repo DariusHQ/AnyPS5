@@ -5550,7 +5550,7 @@ void pendingKeyStoreTests(const Device& device, Recorder& recorder) {
         return;
     }
     recorder.Sync();
-    std::memset(keys, 0x00, keyCount);
+    std::memset(keys, 0x00, bytes);
     MarkDccUncompressed(context, address, surfaceBytes);
     Require(recorder.PendingWriteOverlaps(address, keyCount) && keys[0] == 0x00, "the uncompressed key store did not stay pending");
     Require(CurrentDccKeys(address, surfaceBytes) == DccKeys::Uncompressed, "the keys after a pending uncompressed store do not read as uncompressed");
@@ -5565,6 +5565,9 @@ void pendingKeyStoreTests(const Device& device, Recorder& recorder) {
     Require(KnownPendingDccKeys(address, surfaceBytes) == DccKeys::Clear0001 && recorder.PendingWriteOverlaps(address, keyCount), "the keys of a pending fill were not known without a wait");
     Require(KnownPendingDccKeys(address + 16, surfaceBytes / 2) == DccKeys::Clear0001, "a key range inside a pending fill was not known");
     Require(!KnownPendingDccKeys(address, 2 * surfaceBytes).has_value() && recorder.PendingWriteOverlaps(address, keyCount), "a range wider than the pending fill was known, or waited for");
+    keys[keyCount] = 0xff;
+    Require(KnownPendingDccKeys(address, 2 * surfaceBytes) == DccKeys::Mixed && recorder.PendingWriteOverlaps(address, keyCount), "mixed keys outside the pending fill were not known without a wait");
+    keys[keyCount] = 0x00;
     recorder.NotePendingWrite(address, 2 * keyCount);
     Require(!KnownPendingDccKeys(address, surfaceBytes).has_value() && recorder.PendingWriteOverlaps(address, keyCount), "the keys under a later writer over a pending fill were known");
     Require(CurrentDccKeys(address, surfaceBytes) == DccKeys::Uncompressed && !recorder.PendingWriteOverlaps(address, keyCount), "a later wider writer over a pending fill was not waited for");
